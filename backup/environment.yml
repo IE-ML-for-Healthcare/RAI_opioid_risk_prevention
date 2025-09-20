@@ -1,0 +1,29 @@
+name: od_rai_mamba
+channels:
+  - conda-forge
+channel_priority: strict
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - imbalanced-learn
+  - matplotlib
+  - seaborn
+  - ipywidgets
+  - jupyterlab
+  - notebook
+  - ipykernel
+  - joblib
+  - threadpoolctl
+  - statsmodels
+  - pip:
+      - responsibleai
+      - raiwidgets
+      - interpret-community
+      - erroranalysis
+      - dice-ml
+      - econml
+      - raiutils
