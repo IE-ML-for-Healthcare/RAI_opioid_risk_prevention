@@ -1,0 +1,1 @@
+{"manager_type": "data_balance", "is_added": true, "task_type": "classification", "cols_of_interest": ["Low_inc", "Surgery", "A", "B", "C", "D", "E", "F", "H", "I", "J", "K", "L", "M", "N", "R", "S", "T", "V"], "target_column": "OD", "classes": ["0", "1"]}
