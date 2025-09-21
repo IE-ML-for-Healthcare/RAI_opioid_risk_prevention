@@ -38,6 +38,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import (
     roc_auc_score,
     average_precision_score,
@@ -360,14 +361,25 @@ def plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30):
     plt.tight_layout()
     plt.show()
 
-class ThresholdedEstimator:
+
+class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
     """
-    Wrap a probabilistic classifier so .predict uses a custom threshold on P(y=1)
-    Top-level class so pickle can serialize it for RAIInsights.save(...)
+    Wrap a probabilistic classifier so .predict applies a custom threshold to P(y=positive_label)
+    Top-level class so joblib can serialize it for RAIInsights.save(...)
     """
-    def __init__(self, base, threshold: float = 0.5):
+
+    def __init__(self, base, threshold: float = 0.5, positive_label=1):
         self.base = base
         self.threshold = float(threshold)
+        self.positive_label = positive_label
+
+    # --- API expected by RAI/DiCE and scikit-learn
+
+    def fit(self, X, y=None, **fit_params):
+        """Optionally train the base estimator so the wrapper can be used in pipelines"""
+        if hasattr(self.base, "fit") and y is not None:
+            self.base.fit(X, y, **fit_params)
+        return self
 
     def predict_proba(self, X):
         return self.base.predict_proba(X)
@@ -375,23 +387,45 @@ class ThresholdedEstimator:
     def predict(self, X):
         proba = self.predict_proba(X)
         proba = np.asarray(proba)
-        if proba.ndim == 2 and proba.shape[1] >= 2:
-            return (proba[:, 1] >= self.threshold).astype(int)
-        return (proba.ravel() >= self.threshold).astype(int)
+        # choose correct column for the positive class
+        idx = self._positive_index(proba)
+        return (proba[:, idx] >= self.threshold).astype(int)
 
-    def fit(self, X, y=None):
-        return self
+    def decision_function(self, X):
+        """
+        Provide a margin-like score for compatibility
+        If the base exposes decision_function, use it
+        Otherwise return P(positive) - threshold
+        """
+        if hasattr(self.base, "decision_function"):
+            return self.base.decision_function(X)
+        proba_pos = self._positive_proba(self.predict_proba(X))
+        return proba_pos - self.threshold
 
-    def get_params(self, deep=True):
-        return {"base": self.base, "threshold": self.threshold}
+    # --- Utilities
 
-    def set_params(self, **params):
-        for k, v in params.items():
-            setattr(self, k, v)
-        return self
+    def _positive_index(self, proba_2d: np.ndarray) -> int:
+        """Pick the probability column for the requested positive_label"""
+        if hasattr(self.base, "classes_"):
+            classes = list(self.base.classes_)
+            if self.positive_label in classes:
+                return classes.index(self.positive_label)
+        # fallback to the conventional second column
+        if proba_2d.ndim == 2 and proba_2d.shape[1] >= 2:
+            return 1
+        # binary proba given as shape (n_samples,) or (n_samples, 1)
+        return 0
+
+    def _positive_proba(self, proba):
+        proba = np.asarray(proba)
+        if proba.ndim == 1:
+            return proba
+        return proba[:, self._positive_index(proba)]
 
     def __getattr__(self, name):
+        # delegate unknown attributes to the base estimator
         return getattr(self.base, name)
 
-def make_thresholded_estimator(base_estimator, threshold: float = 0.5):
-    return ThresholdedEstimator(base_estimator, threshold)
+
+def make_thresholded_estimator(base_estimator, threshold: float = 0.5, positive_label=1):
+    return ThresholdedEstimator(base_estimator, threshold=threshold, positive_label=positive_label)
