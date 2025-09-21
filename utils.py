@@ -364,8 +364,8 @@ def plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30):
 
 class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
     """
-    Wrap a probabilistic classifier so .predict applies a custom threshold to P(y=positive_label)
-    Top-level class so joblib can serialize it for RAIInsights.save(...)
+    Wrap a probabilistic classifier so .predict applies a custom threshold to P(y = positive_label)
+    Keeps predict_proba intact for RAI/SHAP/Fairlearn compatibility
     """
 
     def __init__(self, base, threshold: float = 0.5, positive_label=1):
@@ -373,47 +373,80 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
         self.threshold = float(threshold)
         self.positive_label = positive_label
 
-    # --- API expected by RAI/DiCE and scikit-learn
+    # scikit-learn API
 
     def fit(self, X, y=None, **fit_params):
-        """Optionally train the base estimator so the wrapper can be used in pipelines"""
+        # Train base if possible, otherwise act as a pure wrapper
         if hasattr(self.base, "fit") and y is not None:
             self.base.fit(X, y, **fit_params)
+        # Mirror common fitted attrs so downstream tooling can introspect
+        self.classes_ = getattr(self.base, "classes_", None)
+        self.n_features_in_ = getattr(self.base, "n_features_in_", None)
+        self.feature_names_in_ = getattr(self.base, "feature_names_in_", None)
+        self.fitted_ = True
         return self
 
     def predict_proba(self, X):
-        return self.base.predict_proba(X)
+        # RAI classification assumes predict_proba is available
+        if not hasattr(self.base, "predict_proba"):
+            raise AttributeError(
+                f"{type(self.base).__name__} does not implement predict_proba, required for RAI explanations and fairness"
+            )
+        proba = self.base.predict_proba(X)
+        return self._ensure_2d_proba(proba)
 
     def predict(self, X):
-        proba = self.predict_proba(X)
-        proba = np.asarray(proba)
-        # choose correct column for the positive class
-        idx = self._positive_index(proba)
-        return (proba[:, idx] >= self.threshold).astype(int)
+        p_pos = self._positive_proba(self.predict_proba(X))
+        if getattr(self, "classes_", None) is not None and len(self.classes_) == 2:
+            neg_label = self._negative_label()
+            return np.where(p_pos >= self.threshold, self.positive_label, neg_label)
+        # Fallback to {0,1}
+        return (p_pos >= self.threshold).astype(int)
 
     def decision_function(self, X):
-        """
-        Provide a margin-like score for compatibility
-        If the base exposes decision_function, use it
-        Otherwise return P(positive) - threshold
-        """
+        # Prefer base margin if available
         if hasattr(self.base, "decision_function"):
             return self.base.decision_function(X)
-        proba_pos = self._positive_proba(self.predict_proba(X))
-        return proba_pos - self.threshold
+        # Otherwise return centered probability margin
+        return self._positive_proba(self.predict_proba(X)) - self.threshold
 
-    # --- Utilities
+    def predict_log_proba(self, X):
+        if hasattr(self.base, "predict_log_proba"):
+            logp = self.base.predict_log_proba(X)
+            return self._ensure_2d_proba(logp)
+        proba = np.clip(self.predict_proba(X), 1e-15, 1 - 1e-15)
+        return np.log(proba)
+
+    # Convenience
+
+    def set_threshold(self, threshold: float):
+        self.threshold = float(threshold)
+        return self
+
+    # Utilities
+
+    def _ensure_2d_proba(self, arr):
+        arr = np.asarray(arr)
+        if arr.ndim == 1:
+            # Normalize 1D binary proba to 2D [P(neg), P(pos)]
+            arr = np.c_[1 - arr, arr]
+        return arr
 
     def _positive_index(self, proba_2d: np.ndarray) -> int:
-        """Pick the probability column for the requested positive_label"""
-        if hasattr(self.base, "classes_"):
-            classes = list(self.base.classes_)
+        if getattr(self, "classes_", None) is not None:
+            classes = list(self.classes_)
             if self.positive_label in classes:
                 return classes.index(self.positive_label)
-        # fallback to the conventional second column
+        # Conventional second column is positive
         if proba_2d.ndim == 2 and proba_2d.shape[1] >= 2:
             return 1
-        # binary proba given as shape (n_samples,) or (n_samples, 1)
+        return 0
+
+    def _negative_label(self):
+        classes = list(self.classes_)
+        for c in classes:
+            if c != self.positive_label:
+                return c
         return 0
 
     def _positive_proba(self, proba):
@@ -423,7 +456,7 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
         return proba[:, self._positive_index(proba)]
 
     def __getattr__(self, name):
-        # delegate unknown attributes to the base estimator
+        # Delegate unknown attributes to the base estimator
         return getattr(self.base, name)
 
 
