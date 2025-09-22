@@ -1,7 +1,7 @@
 # ML4HL OD RAI Toolbox — Opioid Risk Prevention
 
-This project provides a didactic, end‑to‑end workflow to explore opioid use disorder (OD) risk with a calibrated classification model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable utilities for model evaluation and threshold selection, and a small, synthetic dataset.
-
+This project provides a didactic, end‑to‑end workflow to explore opioid use disorder (OD) risk with a calibrated classification
+model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable utilities for model evaluation and threshold selection, a small synthetic dataset, and optional dashboards powered by the Microsoft Responsible AI toolbox. The material is designed for Bachelor‑level Machine Learning for Healthcare students and emphasizes how responsible ML practices support safer clinical decision making.
 - Goal: generate non‑trivial, actionable insights for clinical decision making using machine learning paired with responsible AI practices.
 - Notebook: `ML4HL_OD_RAI_toolbox.ipynb`
 - Utilities: `utils.py` (AUC reporting, threshold selection policies, plots)
@@ -22,13 +22,13 @@ This project provides a didactic, end‑to‑end workflow to explore opioid use 
 
 
 **Introduction**
-- Purpose: analyze OD risk predictions, understand errors, evaluate performance, and explore threshold policies (workload, recall floors, and cost) to inform prevention strategies.
-- Methods: scikit‑learn pipeline (preprocessing + logistic regression), probability calibration, transparent model reporting (ROC/PR AUC), and threshold trade‑offs. Optional RAI dashboard for model error analysis and interpretability.
-- Notebook origin: adapted from Microsoft’s Responsible AI toolkit examples.
+- Purpose: analyze OD risk predictions, understand errors, evaluate performance, explore threshold policies (workload, recall floors, and cost), and practice responsible ML analyses that translate to clinical interventions.
+- Methods: scikit‑learn pipeline (preprocessing + logistic regression), probability calibration, transparent model reporting (ROC/PR AUC), threshold trade‑offs, and Responsible AI (RAI) tooling for interpretability, error analysis, counterfactuals, and causal insights.
+- Notebook origin: adapted from Microsoft’s Responsible AI toolkit examples with additional didactic commentary for healthcare use cases.
 
 
 **Project Structure**
-- `ML4HL_OD_RAI_toolbox.ipynb`: step‑by‑step walkthrough (data prep, modeling, calibration, thresholding, visualizations).
+- `ML4HL_OD_RAI_toolbox.ipynb`: step‑by‑step walkthrough covering data cleaning, model development, calibration, threshold selection, and RAI dashboard configuration.
 - `utils.py`: helper functions used by the notebook for evaluation, threshold policies, and visualizations.
 - `Data/opiod_raw_data.csv`: sample dataset used by the notebook (1,000 rows).
 - `environment.yml`: conda environment for reproducibility (Python 3.10, sklearn, lightgbm, imbalanced‑learn, matplotlib, RAI packages, etc.).
@@ -51,13 +51,16 @@ This project provides a didactic, end‑to‑end workflow to explore opioid use 
   - `jupyter lab` (or `jupyter notebook`)
 - Open `ML4HL_OD_RAI_toolbox.ipynb` and run cells top‑to‑bottom.
 - What the notebook does:
-  - Loads `Data/opiod_raw_data.csv` and performs light cleaning/renaming (e.g., `rx ds → rx_ds`, `SURG → Surgery`).
-  - Splits data into train/validation/test.
-  - Builds a preprocessing pipeline: median imputation + scaling for numeric, and imputation for binary features.
-  - Trains a logistic regression baseline and applies probability calibration (`CalibratedClassifierCV`).
-  - Reports discrimination (ROC/PR AUC), calibration diagnostics, and prevalence/lift.
-  - Explores threshold selection policies: workload constraints (alerts per 1,000), recall floors, and cost‑based choices.
-  - Visualizes precision/recall vs threshold, cumulative recall vs alerts, and top‑K highest‑risk cases.
+  - Introduces clinical motivation, the learning objectives, and the three RAI themes explored: interpretability, counterfactual reasoning, and causal analysis.
+  - Loads `Data/opiod_raw_data.csv`, performs schema alignment, and renames columns for code friendliness (e.g., `rx ds → rx_ds`, `SURG → Surgery`).
+  - Summarizes the dataset (1,000 patient rows, 20+ features) and explains each attribute in a healthcare context.
+  - Splits data into train/validation/test (80/15/5) with a fixed random seed to mimic real deployment.
+  - Builds a preprocessing pipeline: median imputation + scaling for numeric variables and binary imputation for categorical/binary flags.
+  - Establishes baseline discrimination (majority class vs logistic regression), then trains a calibrated logistic regression model using `CalibratedClassifierCV`.
+  - Reports discrimination (ROC/PR AUC), calibration diagnostics, prevalence, and lift to ground discussions of model quality.
+  - Explores threshold policies: workload constraints (alerts per 1,000), recall floors, and cost‑based choices using helper utilities.
+  - Visualizes threshold trade‑offs (precision/recall vs threshold, cumulative recall vs alerts, top‑K highest risk patients) and justifies the final operating point (recall floor).
+  - Configures the Responsible AI dashboard (interpretability, error analysis, counterfactuals, causal inference) to inspect model behavior beyond global metrics.
 
 
 **Data Description**
@@ -69,6 +72,7 @@ This project provides a didactic, end‑to‑end workflow to explore opioid use 
   - `rx ds`: days of prescribed opioids in 2 years (renamed to `rx_ds`).
   - `A .. V`: binary flags (e.g., infectious diseases, circulatory, respiratory, injuries, trauma, etc.).
 - Example prevalence in the notebook: ~0.18 on validation/test.
+- Dataset is synthetic and safe for classroom use; the notebook highlights how each feature relates to opioid risk and why socioeconomic (e.g., `Low_inc`) or clinical (e.g., comorbidity codes `A`–`V`) variables matter for responsible interpretation.
 
 
 **Utilities: Evaluation, Thresholds, and Plots**
@@ -140,17 +144,25 @@ ResponsibleAIDashboard(rai)
 ```
 
 Notes:
-- If the widget does not render, trust the notebook (File → Trust Notebook) and prefer JupyterLab ≥ 3.x.
-- The dashboard can be heavy; run after the core analysis completes.
+- Dashboard components:
+  - **Interpretability**: global feature importance summaries (e.g., opioid prescription days, income status) that explain why the classifier flags patients.
+  - **Error Analysis**: heatmaps and decision trees that highlight segments (such as surgery patients) where the model underperforms.
+  - **Counterfactuals**: individual patient “what‑if” scenarios (e.g., fewer opioid days) to explore actionable interventions.
+  - **Causal Inference**: uplift estimates to reason about policy changes and their potential impact on OD incidence.
+- Usage tips:
+  - If the widget does not render, trust the notebook (File → Trust Notebook) and prefer JupyterLab ≥ 3.x.
+  - The dashboard can be heavy; run after the core analysis completes and save outputs for later review in class discussions.
 
 
 **Reproducibility and Notes**
 - Random seed: the notebook sets `RANDOM_STATE = 42` for splits and modeling.
 - Calibration: uses `CalibratedClassifierCV` over a logistic baseline pipeline (with imputation, scaling, and variance filtering).
+- Recalibration: highlights why calibrated probabilities support clinician trust and thresholding decisions (probabilities align with observed frequencies).
+- Threshold selection: recommends the recall‑floor operating point (threshold ≈ 0.28) as a balanced policy for patient safety versus workload.
 - Reported examples in the notebook (will vary with random seeds/splits):
   - Baseline logistic (validation): PR AUC ≈ 0.495, ROC AUC ≈ 0.750, prevalence ≈ 0.18, lift ≈ 2.75×.
   - Final calibrated model (test): PR AUC ≈ 0.445, ROC AUC ≈ 0.764, prevalence ≈ 0.18, lift ≈ 2.47×.
-- Data stewardship: this is a synthetic teaching dataset. In clinical settings, ensure governance, privacy, and bias auditing before deployment.
+- Data stewardship: this is a synthetic teaching dataset. In clinical settings, ensure governance, privacy, bias auditing, and alignment with institutional review processes before deployment.
 
 
 **Troubleshooting**
