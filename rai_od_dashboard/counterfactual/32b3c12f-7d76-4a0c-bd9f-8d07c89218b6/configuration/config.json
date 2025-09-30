@@ -1,1 +1,0 @@
-{"method": "random", "continuous_features": ["rx_ds"], "total_CFs": 50, "id": "796c03fb-7aa2-4844-884f-b6aa7061e6f0", "desired_range": null, "desired_class": "opposite", "permitted_range": {"rx_ds": [0.0, 1881.452000000007]}, "features_to_vary": ["rx_ds", "Surgery", "A", "B", "C", "D", "E", "F", "H", "I", "J", "K", "L", "M", "N", "R", "S", "T", "V"], "feature_importance": true}

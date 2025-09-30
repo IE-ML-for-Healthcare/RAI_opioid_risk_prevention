@@ -1,1 +1,0 @@
-{"explanation_id": "f5a1040c-6218-4d9d-8575-b5367aa833bc", "model_type": "classification", "data_type": "tabular", "model_task": "classification", "method": "mimic.lightgbm", "model_class": null, "is_raw": false, "is_engineered": false, "global": true, "local": true, "num_classes": 2, "num_examples": 50, "num_features": 20, "is_local_sparse": false, "serialization_version": 1}

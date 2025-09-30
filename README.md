@@ -120,7 +120,7 @@ plot_topk_at_threshold(y_val, y_score, chosen_threshold=thr, top_k=30)
 ```
 
 
-**Optional: Responsible AI Dashboard**
+**Responsible AI Dashboard**
 The environment includes `responsibleai` and `raiwidgets`. The notebook imports them; you can optionally create a dashboard for error analysis and explanations. Example pattern:
 
 ```python
