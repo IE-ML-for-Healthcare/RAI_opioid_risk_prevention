@@ -34,7 +34,7 @@ Functions
 - plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30): 
     Plots a bar chart of the top-k highest risk cases, coloring true positives and false positives, with a line for the chosen threshold.
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -61,7 +61,129 @@ __all__ = [
     "plot_cumulative_recall_at_threshold",
     "plot_topk_at_threshold",
     "make_thresholded_estimator",
+    "init_rai_dependencies",
 ]
+
+
+def init_rai_dependencies():
+    """Attempt to import optional Responsible AI dependencies.
+
+    Returns
+    -------
+    Tuple[Dict[str, bool], Dict[str, object]]
+        A tuple containing:
+        * a mapping of status flags ("_RAI", "_INTERPRET", "_ERRANALYSIS",
+          "_FAIRLEARN") indicating availability of each package
+        * a mapping of imported objects keyed by the public names used in the
+          notebook (e.g., "RAIInsights", "TabularExplainer"). Missing
+          dependencies are mapped to ``None`` so callers can safely
+          ``globals().update`` the result without leaving stale references.
+    """
+
+    status = {
+        "_RAI": False,
+        "_INTERPRET": False,
+        "_ERRANALYSIS": False,
+        "_FAIRLEARN": False,
+    }
+
+    objects = {
+        "RAIInsights": None,
+        "FeatureMetadata": None,
+        "ResponsibleAIDashboard": None,
+        "ExplanationDashboard": None,
+        "ErrorAnalysisDashboard": None,
+        "ModelAnalyzer": None,
+        "TabularExplainer": None,
+        "MetricFrame": None,
+        "selection_rate": None,
+        "true_positive_rate": None,
+        "false_positive_rate": None,
+        "false_negative_rate": None,
+    }
+
+    try:
+        from responsibleai import RAIInsights  # type: ignore
+        from responsibleai.feature_metadata import FeatureMetadata  # type: ignore
+        from raiwidgets import (  # type: ignore
+            ResponsibleAIDashboard,
+            ExplanationDashboard,
+            ErrorAnalysisDashboard,
+        )
+
+        status["_RAI"] = True
+        status["_ERRANALYSIS"] = True
+        objects.update({
+            "RAIInsights": RAIInsights,
+            "FeatureMetadata": FeatureMetadata,
+            "ResponsibleAIDashboard": ResponsibleAIDashboard,
+            "ExplanationDashboard": ExplanationDashboard,
+            "ErrorAnalysisDashboard": ErrorAnalysisDashboard,
+        })
+    except Exception as exc:  # pragma: no cover - optional dependency
+        print(f"RAI core/widgets unavailable: {exc}")
+
+    try:
+        from interpret_community.tabular_explainer import (  # type: ignore
+            TabularExplainer,
+        )
+
+        status["_INTERPRET"] = True
+        objects["TabularExplainer"] = TabularExplainer
+    except Exception as exc:  # pragma: no cover - optional dependency
+        print(f"Interpret-Community unavailable: {exc}")
+
+    try:
+        from erroranalysis import ModelAnalyzer  # type: ignore
+
+        status["_ERRANALYSIS"] = True
+        objects["ModelAnalyzer"] = ModelAnalyzer
+    except Exception as exc:  # pragma: no cover - optional dependency
+        if not status["_ERRANALYSIS"]:
+            print(f"Error Analysis unavailable: {exc}")
+
+    try:
+        from fairlearn.metrics import (  # type: ignore
+            MetricFrame,
+            selection_rate,
+            true_positive_rate,
+            false_positive_rate,
+            false_negative_rate,
+        )
+    except Exception as exc:  # pragma: no cover - optional dependency
+        try:
+            from fairlearn.metrics import (  # type: ignore
+                MetricFrame,
+                selection_rate,
+                true_positive_rate,
+                false_positive_rate,
+            )
+
+            def false_negative_rate(y_true, y_pred):
+                tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+                return fn / (fn + tp) if (fn + tp) > 0 else 0.0
+
+            status["_FAIRLEARN"] = True
+            objects.update({
+                "MetricFrame": MetricFrame,
+                "selection_rate": selection_rate,
+                "true_positive_rate": true_positive_rate,
+                "false_positive_rate": false_positive_rate,
+                "false_negative_rate": false_negative_rate,
+            })
+        except Exception as inner_exc:  # pragma: no cover - optional dependency
+            print(f"Fairlearn metrics unavailable: {inner_exc}")
+    else:
+        status["_FAIRLEARN"] = True
+        objects.update({
+            "MetricFrame": MetricFrame,
+            "selection_rate": selection_rate,
+            "true_positive_rate": true_positive_rate,
+            "false_positive_rate": false_positive_rate,
+            "false_negative_rate": false_negative_rate,
+        })
+
+    return status, objects
 
 
 def positive_scores(estimator, X) -> np.ndarray:
