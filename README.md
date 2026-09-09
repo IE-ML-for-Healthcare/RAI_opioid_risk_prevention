@@ -1,8 +1,7 @@
-# ML4HL OD RAI Toolbox — Opioid Risk Prevention
+# ML4HL Responsible Artificial Intelligence Toolbox: Retrospective Opioid Use Disorder Risk Stratification
 
-This project provides a didactic, end‑to‑end workflow to explore opioid use disorder (OD) risk with a calibrated classification
-model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable utilities for model evaluation and threshold selection, a small synthetic dataset, and optional dashboards powered by the Microsoft Responsible AI toolbox. The material is designed for Bachelor‑level Machine Learning for Healthcare students and emphasizes how responsible ML practices support safer clinical decision making.
-- Goal: generate non‑trivial, actionable insights for clinical decision making using machine learning paired with responsible AI practices.
+This project provides a teaching workflow for retrospective opioid use disorder (OUD) risk stratification with a calibrated classification model and Responsible Artificial Intelligence (RAI) tools. The dataset column `OD` records whether OUD was documented during the same 2-year source period used for the predictors. The workflow is not validated for prospective incident prediction, diagnosis or clinical deployment
+- Goal: help students translate model outputs into explicit, auditable clinical-policy interpretations
 - Notebook: `ML4HL_OD_RAI_toolbox.ipynb`
 - Utilities: `utils.py` (AUC reporting, threshold selection policies, plots)
 - Data: `Data/opiod_raw_data.csv` (1,000 rows, 20+ features)
@@ -22,7 +21,7 @@ model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable
 
 
 **Introduction**
-- Purpose: analyze OD risk predictions, understand errors, evaluate performance, explore threshold policies (workload, recall floors, and cost), and practice responsible ML analyses that translate to clinical interventions.
+- Purpose: analyse retrospective OUD risk scores, understand errors, evaluate performance and explore validation-only threshold policies based on workload, recall and illustrative harm points
 - Methods: scikit‑learn pipeline (preprocessing + logistic regression), probability calibration, transparent model reporting (ROC/PR AUC), threshold trade‑offs, and Responsible AI (RAI) tooling for interpretability, error analysis, counterfactuals, and causal insights.
 - Notebook origin: adapted from Microsoft’s Responsible AI toolkit examples with additional didactic commentary for healthcare use cases.
 
@@ -31,7 +30,7 @@ model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable
 - `ML4HL_OD_RAI_toolbox.ipynb`: step‑by‑step walkthrough covering data cleaning, model development, calibration, threshold selection, and RAI dashboard configuration.
 - `utils.py`: helper functions used by the notebook for evaluation, threshold policies, and visualizations.
 - `Data/opiod_raw_data.csv`: sample dataset used by the notebook (1,000 rows).
-- `environment.yml`: conda environment for reproducibility (Python 3.10, sklearn, lightgbm, imbalanced‑learn, matplotlib, RAI packages, etc.).
+- `environment.yml`: Conda environment for reproducibility, including the validated Python 3.10 scientific stack and RAI packages
 - `LICENSE`: license for this repository.
 - `README.md`: this file.
 
@@ -40,7 +39,7 @@ model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable
 - Prereqs: conda/mamba, Git, and a working Jupyter setup.
 - Create the environment (recommended via conda/mamba):
   - `conda env create -f environment.yml`
-  - `conda activate od_rai_lgbm`
+  - `conda activate od_rai_mamba`
 - Verify Jupyter + widgets:
   - `python -c "import IPython, ipywidgets; print('Jupyter OK')"`
   - If using JupyterLab and widgets don’t render, ensure Lab ≥ 3.x. No manual widget install is typically required with this env.
@@ -54,25 +53,25 @@ model and Responsible AI (RAI) tooling. It includes a Jupyter notebook, reusable
   - Introduces clinical motivation, the learning objectives, and the three RAI themes explored: interpretability, counterfactual reasoning, and causal analysis.
   - Loads `Data/opiod_raw_data.csv`, performs schema alignment, and renames columns for code friendliness (e.g., `rx ds → rx_ds`, `SURG → Surgery`).
   - Summarizes the dataset (1,000 patient rows, 20+ features) and explains each attribute in a healthcare context.
-  - Splits data into train/validation/test (80/15/5) with a fixed random seed to mimic real deployment.
+  - Splits data into training, validation and test sets (80/15/5) with a fixed random seed
   - Builds a preprocessing pipeline: median imputation + scaling for numeric variables and binary imputation for categorical/binary flags.
   - Establishes baseline discrimination (majority class vs logistic regression), then trains a calibrated logistic regression model using `CalibratedClassifierCV`.
   - Reports discrimination (ROC/PR AUC), calibration diagnostics, prevalence, and lift to ground discussions of model quality.
-  - Explores threshold policies: workload constraints (alerts per 1,000), recall floors, and cost‑based choices using helper utilities.
-  - Visualizes threshold trade‑offs (precision/recall vs threshold, cumulative recall vs alerts, top‑K highest risk patients) and justifies the final operating point (recall floor).
+  - Keeps workload-only, recall-floor-only and harm-point sensitivity analyses separate on validation data
+  - Freezes the threshold using the joint validation rule before one final test evaluation
   - Configures the Responsible AI dashboard (interpretability, error analysis, counterfactuals, causal inference) to inspect model behavior beyond global metrics.
 
 
 **Data Description**
 - Rows: patient‑level records.
-- Target: `OD` (1 = opioid use disorder in the 2‑year window, 0 = otherwise).
+- Target: `OD` (1 = recorded OUD diagnosis in the source 2-year period, 0 = no recorded diagnosis)
 - Key predictors in the raw CSV:
   - `Low_inc`: low income flag.
   - `SURG`: surgery within 2 years (renamed to `Surgery` in notebook).
-  - `rx ds`: days of prescribed opioids in 2 years (renamed to `rx_ds`).
+  - `rx ds`: cumulative opioid prescription days-supply filled during 2 years, renamed to `rx_ds`; it is not confirmed consumption or unique exposure days
   - `A .. V`: binary flags (e.g., infectious diseases, circulatory, respiratory, injuries, trauma, etc.).
 - Example prevalence in the notebook: ~0.18 on validation/test.
-- Dataset is synthetic and safe for classroom use; the notebook highlights how each feature relates to opioid risk and why socioeconomic (e.g., `Low_inc`) or clinical (e.g., comorbidity codes `A`–`V`) variables matter for responsible interpretation.
+- The dataset is synthetic and supports classroom analysis only. The source does not establish that all predictors preceded the OUD diagnosis
 
 
 **Utilities: Evaluation, Thresholds, and Plots**
@@ -108,8 +107,8 @@ Minimal example (outside the notebook):
 y_score = positive_scores(clf, X_val)
 auc_report(y_val, y_score, name="My Model", plot=True)
 
-# Choose threshold under an alert budget of 100 per 1,000
-res = pick_threshold_workload(y_val, y_score, alerts_per_1000_max=100.0)
+# Choose threshold under an illustrative alert budget of 300 per 1,000
+res = pick_threshold_workload(y_val, y_score, alerts_per_1000_max=300.0)
 print(res["summary"])   # chosen threshold and metrics
 
 # Visualize at the chosen threshold
@@ -158,10 +157,11 @@ Notes:
 - Random seed: the notebook sets `RANDOM_STATE = 42` for splits and modeling.
 - Calibration: uses `CalibratedClassifierCV` over a logistic baseline pipeline (with imputation, scaling, and variance filtering).
 - Recalibration: highlights why calibrated probabilities support clinician trust and thresholding decisions (probabilities align with observed frequencies).
-- Threshold selection: recommends the recall‑floor operating point (threshold ≈ 0.28) as a balanced policy for patient safety versus workload.
-- Reported examples in the notebook (will vary with random seeds/splits):
+- Threshold selection: validation recall must be at least 60% and alerts must not exceed 300 per 1,000; the feasible threshold with highest precision is locked before test evaluation
+- Executed validation result: threshold 0.28; recall 0.630 (17 of 27, 95% confidence interval 0.442 to 0.785), precision 0.459 (17 of 37, 95% confidence interval 0.310 to 0.616), and 246.7 alerts per 1,000
+- Final locked test result from 50 synthetic records:
   - Baseline logistic (validation): PR AUC ≈ 0.495, ROC AUC ≈ 0.750, prevalence ≈ 0.18, lift ≈ 2.75×.
-  - Final calibrated model (test): PR AUC ≈ 0.445, ROC AUC ≈ 0.764, prevalence ≈ 0.18, lift ≈ 2.47×.
+  - Recall 0.556 (5 of 9, 95% confidence interval 0.267 to 0.811), precision 0.294 (5 of 17, 95% confidence interval 0.133 to 0.531), 340 alerts per 1,000, precision-recall area under the curve 0.445 and receiver operating characteristic area under the curve 0.764
 - Data stewardship: this is a synthetic teaching dataset. In clinical settings, ensure governance, privacy, bias auditing, and alignment with institutional review processes before deployment.
 
 
@@ -170,7 +170,7 @@ Notes:
   - Trust the notebook. Try JupyterLab instead of classic Notebook.
   - Ensure the conda env is active where Jupyter runs (`which jupyter`).
 - Import errors (e.g., `fairlearn`, `responsibleai`):
-  - Recreate the environment: `conda env remove -n od_rai_lgbm && conda env create -f environment.yml`.
+  - Recreate the environment: `conda env remove -n od_rai_mamba && conda env create -f environment.yml`
 - Plots not appearing:
   - Ensure cells aren’t in skipped state and that Matplotlib backend is interactive (`%matplotlib inline` or default in Jupyter).
 

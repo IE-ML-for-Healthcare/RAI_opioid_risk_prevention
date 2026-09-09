@@ -1,16 +1,16 @@
 name: od_rai_mamba
 channels:
   - conda-forge
-channel_priority: strict
 dependencies:
   - python=3.10
   - pip
-  - numpy
-  - pandas
-  - scipy
-  - scikit-learn
+  - "libblas=*=*openblas"
+  - numpy=1.26.2
+  - pandas=1.5.3
+  - scipy=1.13.1
+  - scikit-learn=1.5.1
   - imbalanced-learn
-  - matplotlib
+  - matplotlib=3.9.2
   - seaborn
   - ipywidgets
   - jupyterlab
