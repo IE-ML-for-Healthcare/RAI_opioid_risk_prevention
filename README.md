@@ -53,9 +53,9 @@ This project provides a teaching workflow for retrospective opioid use disorder 
   - Introduces clinical motivation, the learning objectives, and the three RAI themes explored: interpretability, counterfactual reasoning, and causal analysis.
   - Loads `Data/opiod_raw_data.csv`, performs schema alignment, and renames columns for code friendliness (e.g., `rx ds → rx_ds`, `SURG → Surgery`).
   - Summarizes the dataset (1,000 patient rows, 20+ features) and explains each attribute in a healthcare context.
-  - Splits data into training, validation and test sets (80/15/5) with a fixed random seed
+  - Splits data into training, validation and test sets (70/15/15) with a fixed random seed, keeping test outcomes closed until final evaluation
   - Builds a preprocessing pipeline: median imputation + scaling for numeric variables and binary imputation for categorical/binary flags.
-  - Establishes baseline discrimination (majority class vs logistic regression), then trains a calibrated logistic regression model using `CalibratedClassifierCV`.
+  - Establishes baseline discrimination (majority class vs unweighted logistic regression), then calibrates the logistic model using `CalibratedClassifierCV`.
   - Reports discrimination (ROC/PR AUC), calibration diagnostics, prevalence, and lift to ground discussions of model quality.
   - Keeps workload-only, recall-floor-only and harm-point sensitivity analyses separate on validation data
   - Freezes the threshold using the joint validation rule before one final test evaluation
@@ -79,7 +79,7 @@ This project provides a teaching workflow for retrospective opioid use disorder 
 
 ```python
 from utils import (
-    positive_scores, auc_report, tradeoff_table,
+    positive_scores, auc_report, tradeoff_table, wilson_interval,
     pick_threshold_cost, pick_threshold_recall_floor, pick_threshold_workload,
     summary_at_threshold,
     plot_recall_floor_curves, plot_cumulative_recall_at_threshold, plot_topk_at_threshold,
@@ -90,7 +90,7 @@ from utils import (
   - `positive_scores(estimator, X)`: returns positive‑class scores for classifiers supporting `predict_proba` or `decision_function`.
   - `auc_report(y_true, y_score, name="model", plot=True)`: prints ROC/PR AUC, prevalence, and lift; plots ROC/PR curves.
 - Threshold trade‑offs
-  - `tradeoff_table(y_true, y_score, thresholds=None)`: precision, recall, confusion counts, alerts/1k, TP/1k across thresholds.
+  - `tradeoff_table(y_true, y_score, thresholds=None)`: precision, recall, confusion counts, alerts/1k, and TP/1k across 0, each distinct score, and 1 when thresholds are omitted
   - `pick_threshold_workload(y_true, y_score, alerts_per_1000_max)`: best TP/1k under an alert budget (returns summary + table).
   - `pick_threshold_recall_floor(y_true, y_score, recall_floor)`: max precision subject to minimum recall (returns summary + table).
   - `pick_threshold_cost(y_true, y_score, C_FP, C_FN)`: minimizes expected cost (Bayes formula vs empirical minimum).
@@ -156,12 +156,12 @@ Notes:
 **Reproducibility and Notes**
 - Random seed: the notebook sets `RANDOM_STATE = 42` for splits and modeling.
 - Calibration: uses `CalibratedClassifierCV` over a logistic baseline pipeline (with imputation, scaling, and variance filtering).
-- Recalibration: highlights why calibrated probabilities support clinician trust and thresholding decisions (probabilities align with observed frequencies).
+- Recalibration: compares average raw and calibrated probabilities with observed validation prevalence; it does not guarantee an individual outcome
 - Threshold selection: validation recall must be at least 60% and alerts must not exceed 300 per 1,000; the feasible threshold with highest precision is locked before test evaluation
-- Executed validation result: threshold 0.28; recall 0.630 (17 of 27, 95% confidence interval 0.442 to 0.785), precision 0.459 (17 of 37, 95% confidence interval 0.310 to 0.616), and 246.7 alerts per 1,000
-- Final locked test result from 50 synthetic records:
-  - Baseline logistic (validation): PR AUC ≈ 0.495, ROC AUC ≈ 0.750, prevalence ≈ 0.18, lift ≈ 2.75×.
-  - Recall 0.556 (5 of 9, 95% confidence interval 0.267 to 0.811), precision 0.294 (5 of 17, 95% confidence interval 0.133 to 0.531), 340 alerts per 1,000, precision-recall area under the curve 0.445 and receiver operating characteristic area under the curve 0.764
+- Executed split: 700 training records with 127 recorded OUD cases, 150 validation records with 27 cases, and 150 final test records with 27 cases
+- Calibration-in-the-large on validation: observed prevalence 0.180, mean raw predicted probability 0.186, mean calibrated predicted probability 0.185, absolute difference 0.005
+- Executed validation result: threshold 0.219932; recall 0.667 (18 of 27, 95% confidence interval 0.478 to 0.814), precision 0.439 (18 of 41, 95% confidence interval 0.299 to 0.590), and 273.3 alerts per 1,000
+- Final locked test result from 150 synthetic records: recall 0.741 (20 of 27, 95% confidence interval 0.553 to 0.868), precision 0.370 (20 of 54, 95% confidence interval 0.254 to 0.504), 360 alerts per 1,000, precision-recall area under the curve 0.405 and receiver operating characteristic area under the curve 0.731
 - Data stewardship: this is a synthetic teaching dataset. In clinical settings, ensure governance, privacy, bias auditing, and alignment with institutional review processes before deployment.
 
 

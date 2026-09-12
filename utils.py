@@ -25,6 +25,9 @@ Functions
 - summary_at_threshold(y_true, y_score, threshold): 
     Returns a DataFrame with precision, recall, TP, FP, TN, FN, alerts per 1000, and true positives per 1000 at a specific threshold.
 
+- wilson_interval(successes, total, confidence=0.95):
+    Returns a Wilson score interval for a binomial proportion.
+
 - plot_recall_floor_curves(y_true, y_score, recall_floor, chosen_threshold): 
     Plots precision and recall versus threshold, with lines for recall floor and chosen threshold, and labels at the chosen threshold.
 
@@ -48,6 +51,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
+from scipy.stats import norm
 
 __all__ = [
     "positive_scores",
@@ -57,12 +61,25 @@ __all__ = [
     "pick_threshold_recall_floor",
     "pick_threshold_workload",
     "summary_at_threshold",
+    "wilson_interval",
     "plot_recall_floor_curves",
     "plot_cumulative_recall_at_threshold",
     "plot_topk_at_threshold",
     "make_thresholded_estimator",
     "init_rai_dependencies",
 ]
+
+
+def wilson_interval(successes: int, total: int, confidence: float = 0.95) -> Tuple[float, float]:
+    """Return a Wilson score interval for a binomial proportion."""
+    if total == 0:
+        return (np.nan, np.nan)
+    z = norm.ppf(1 - (1 - confidence) / 2)
+    p = successes / total
+    denominator = 1 + z**2 / total
+    centre = (p + z**2 / (2 * total)) / denominator
+    margin = z * np.sqrt((p * (1 - p) + z**2 / (4 * total)) / total) / denominator
+    return (centre - margin, centre + margin)
 
 
 def init_rai_dependencies():
@@ -251,9 +268,15 @@ def tradeoff_table(y_true, y_score, thresholds: Optional[np.ndarray] = None) -> 
     y_true = np.asarray(y_true).ravel().astype(int)
     y_score = np.asarray(y_score).ravel()
 
+    if not np.isfinite(y_score).all():
+        raise ValueError("y_score must contain only finite values")
+
     if thresholds is None:
-        thresholds = np.linspace(0.0, 1.0, 101)
-    thresholds = np.asarray(thresholds)
+        # A classification can change only when the threshold crosses a
+        # distinct score. Include the probability endpoints for completeness.
+        thresholds = np.unique(np.concatenate(([0.0], y_score, [1.0])))
+    else:
+        thresholds = np.asarray(thresholds, dtype=float).ravel()
 
     rows = []
     n = len(y_true)
@@ -471,14 +494,14 @@ def plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30):
 
     plt.figure(figsize=(10, 4))
     plt.bar(tp_idx, top_scores[tp_idx],
-            label="True addicted TP", color="tab:red")
+            label="Recorded OUD: true positive", color="tab:red")
     plt.bar(fp_idx, top_scores[fp_idx],
-            label="Not addicted FP", color="tab:gray")
+            label="No recorded OUD: false positive", color="tab:gray")
     plt.axhline(float(chosen_threshold), linestyle="--", color="black",
-                label=f"Threshold = {float(chosen_threshold):.2f}")
-    plt.xlabel("Patients ranked by predicted risk")
-    plt.ylabel("Predicted risk")
-    plt.title(f"Top {int(top_k)} highest-risk patients on validation")
+                label=f"Alert threshold = {float(chosen_threshold):.2f}")
+    plt.xlabel("Validation records ranked by model-estimated OUD risk")
+    plt.ylabel("Model-estimated OUD risk")
+    plt.title(f"Top {int(top_k)} validation records by model-estimated OUD risk")
     plt.legend()
     plt.tight_layout()
     plt.show()
