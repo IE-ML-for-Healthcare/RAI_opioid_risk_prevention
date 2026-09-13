@@ -242,18 +242,41 @@ def auc_report(y_true, y_score, name: str = "model", plot: bool = True) -> Dict[
     print(f"{name}")
     print(f"PR AUC: {pr_auc:.3f}")
     print(f"ROC AUC: {roc:.3f}")
-    print(
-        f"Prevalence p = {prevalence:.3f}  |  PR AUC lift = {lift:.2f}× over baseline")
+    print(f"Recorded OUD prevalence: {prevalence:.3f}")
+    print(f"PR AUC relative to prevalence baseline: {lift:.2f} times")
 
     if plot:
-        RocCurveDisplay.from_predictions(y_true, y_score)
+        roc_display = RocCurveDisplay.from_predictions(y_true, y_score)
         plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
-        plt.title(f"ROC curve {name} (AUC = {roc:.3f})")
+        roc_display.line_.set_label(
+            f"Model (area under ROC curve = {roc:.3f})"
+        )
+        roc_display.ax_.set_xlabel(
+            "False positive rate (share of records without recorded OUD flagged)"
+        )
+        roc_display.ax_.set_ylabel("True positive rate (recall / sensitivity)")
+        roc_display.ax_.legend()
+        plt.title(
+            f"Receiver operating characteristic (ROC) curve: {name} "
+            f"(ROC AUC = {roc:.3f})"
+        )
         plt.show()
 
-        PrecisionRecallDisplay.from_predictions(y_true, y_score)
+        pr_display = PrecisionRecallDisplay.from_predictions(y_true, y_score)
         plt.hlines(prevalence, 0, 1, colors="gray", linestyles="dotted")
-        plt.title(f"Precision recall curve {name} (PR AUC = {pr_auc:.3f})")
+        pr_display.line_.set_label(
+            f"Model (area under precision-recall curve = {pr_auc:.3f})"
+        )
+        pr_display.ax_.set_xlabel(
+            "Recall (sensitivity, share of recorded OUD cases flagged)"
+        )
+        pr_display.ax_.set_ylabel(
+            "Precision (share of alerts with recorded OUD)"
+        )
+        pr_display.ax_.legend()
+        plt.title(
+            f"Precision-recall curve: {name} (PR AUC = {pr_auc:.3f})"
+        )
         plt.xlim(0, 1)
         plt.ylim(0, 1)
         plt.show()
@@ -417,25 +440,25 @@ def plot_recall_floor_curves(y_true, y_score, recall_floor, chosen_threshold):
     chosen = summary_at_threshold(y_true, y_score, chosen_threshold).iloc[0]
 
     plt.figure()
-    plt.plot(tbl["threshold"], tbl["recall"], label="Recall")
+    plt.plot(tbl["threshold"], tbl["recall"], label="Recall (sensitivity)")
     plt.plot(tbl["threshold"], tbl["precision"], label="Precision")
     plt.axhline(float(recall_floor), linestyle="--", color="red",
-                label=f"Recall floor = {float(recall_floor):.2f}")
+                label=f"Minimum recall target = {float(recall_floor):.2f}")
     plt.axvline(float(chosen_threshold), linestyle=":", color="black",
-                label=f"Chosen threshold = {float(chosen_threshold):.2f}")
+                label=f"Selected alert threshold = {float(chosen_threshold):.2f}")
 
     plt.scatter(float(chosen_threshold),
                 chosen["recall"], color="blue", zorder=5)
     plt.text(float(chosen_threshold) + 0.01,
-             chosen["recall"], f"Recall={chosen['recall']:.2f}", va="center")
+             chosen["recall"], f"Recall (sensitivity)={chosen['recall']:.2f}", va="center")
     plt.scatter(float(chosen_threshold),
                 chosen["precision"], color="orange", zorder=5)
     plt.text(float(chosen_threshold) + 0.01,
-             chosen["precision"], f"Prec={chosen['precision']:.2f}", va="center")
+             chosen["precision"], f"Precision={chosen['precision']:.2f}", va="center")
 
-    plt.xlabel("Threshold")
-    plt.ylabel("Score")
-    plt.title("Recall floor then maximize precision")
+    plt.xlabel("Alert threshold")
+    plt.ylabel("Metric value")
+    plt.title("Validation threshold trade-off: recall and precision")
     plt.legend()
     plt.xlim(0, 0.55)
     plt.show()
@@ -464,15 +487,19 @@ def plot_cumulative_recall_at_threshold(y_true, y_score, chosen_threshold):
                        ) if 0 < n_alerts <= len(y_sorted) else 0.0
 
     plt.figure()
-    plt.plot(alerts, recall_curve, label="Cumulative recall")
+    plt.plot(
+        alerts,
+        recall_curve,
+        label="Cumulative recall (share of recorded OUD cases flagged)",
+    )
     plt.axvline(n_alerts, linestyle="--", color="red",
-                label=f"Alerts = {n_alerts}")
+                label=f"Alerts at threshold = {n_alerts}")
     plt.scatter(n_alerts, rec_at_thr, color="black", zorder=5)
     plt.text(n_alerts + max(2, len(y_sorted)//100), rec_at_thr,
              f"Recall = {rec_at_thr:.2f}", va="center")
     plt.xlabel("Number of alerts")
-    plt.ylabel("Recall")
-    plt.title("Cumulative capture of true cases vs alerts")
+    plt.ylabel("Cumulative recall (share of recorded OUD cases flagged)")
+    plt.title("Validation: recorded OUD cases flagged as alert count increases")
     plt.legend()
     plt.show()
 
@@ -494,13 +521,13 @@ def plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30):
 
     plt.figure(figsize=(10, 4))
     plt.bar(tp_idx, top_scores[tp_idx],
-            label="Recorded OUD: true positive", color="tab:red")
+            label="Recorded OUD: correctly flagged (true positive)", color="tab:red")
     plt.bar(fp_idx, top_scores[fp_idx],
-            label="No recorded OUD: false positive", color="tab:gray")
+            label="No recorded OUD: alert (false positive)", color="tab:gray")
     plt.axhline(float(chosen_threshold), linestyle="--", color="black",
                 label=f"Alert threshold = {float(chosen_threshold):.2f}")
     plt.xlabel("Validation records ranked by model-estimated OUD risk")
-    plt.ylabel("Model-estimated OUD risk")
+    plt.ylabel("Model-estimated OUD risk score")
     plt.title(f"Top {int(top_k)} validation records by model-estimated OUD risk")
     plt.legend()
     plt.tight_layout()
@@ -509,8 +536,8 @@ def plot_topk_at_threshold(y_true, y_score, chosen_threshold, top_k=30):
 
 class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
     """
-    Wrap a probabilistic classifier so .predict applies a custom threshold to P(y = positive_label)
-    Keeps predict_proba intact for RAI/SHAP/Fairlearn compatibility
+    Wrap a probabilistic classifier so `.predict` applies a chosen probability threshold
+    Keep `.predict_proba` unchanged so Responsible Artificial Intelligence tools can inspect probabilities
     """
 
     def __init__(self, base, threshold: float = 0.5, positive_label=1):
@@ -521,7 +548,7 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
     # scikit-learn API
 
     def fit(self, X, y=None, **fit_params):
-        # Train base if possible, otherwise act as a pure wrapper
+        # Fit the wrapped estimator when training data are supplied
         if hasattr(self.base, "fit") and y is not None:
             self.base.fit(X, y, **fit_params)
         # Mirror common fitted attrs so downstream tooling can introspect
@@ -532,7 +559,7 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_proba(self, X):
-        # RAI classification assumes predict_proba is available
+        # The dashboard requires probability outputs
         if not hasattr(self.base, "predict_proba"):
             raise AttributeError(
                 f"{type(self.base).__name__} does not implement predict_proba, required for RAI explanations and fairness"
@@ -549,7 +576,7 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
         return (p_pos >= self.threshold).astype(int)
 
     def decision_function(self, X):
-        # Prefer base margin if available
+        # Use the base model's margin when available
         if hasattr(self.base, "decision_function"):
             return self.base.decision_function(X)
         # Otherwise return centered probability margin
@@ -601,7 +628,7 @@ class ThresholdedEstimator(BaseEstimator, ClassifierMixin):
         return proba[:, self._positive_index(proba)]
 
     def __getattr__(self, name):
-        # Delegate unknown attributes to the base estimator
+        # Let callers access attributes exposed by the wrapped estimator
         return getattr(self.base, name)
 
 
