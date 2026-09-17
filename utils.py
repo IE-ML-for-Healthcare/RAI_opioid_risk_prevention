@@ -439,7 +439,7 @@ def plot_recall_floor_curves(y_true, y_score, recall_floor, chosen_threshold):
     tbl = tradeoff_table(y_true, y_score)
     chosen = summary_at_threshold(y_true, y_score, chosen_threshold).iloc[0]
 
-    plt.figure()
+    plt.figure(figsize=(8, 4.8))
     plt.plot(tbl["threshold"], tbl["recall"], label="Recall (sensitivity)")
     plt.plot(tbl["threshold"], tbl["precision"], label="Precision")
     plt.axhline(float(recall_floor), linestyle="--", color="red",
@@ -449,18 +449,31 @@ def plot_recall_floor_curves(y_true, y_score, recall_floor, chosen_threshold):
 
     plt.scatter(float(chosen_threshold),
                 chosen["recall"], color="blue", zorder=5)
-    plt.text(float(chosen_threshold) + 0.01,
-             chosen["recall"], f"Recall (sensitivity)={chosen['recall']:.2f}", va="center")
+    plt.annotate(
+        f"Recall (sensitivity)={chosen['recall']:.2f}",
+        xy=(float(chosen_threshold), chosen["recall"]),
+        xytext=(8, 10),
+        textcoords="offset points",
+        va="bottom",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
+    )
     plt.scatter(float(chosen_threshold),
                 chosen["precision"], color="orange", zorder=5)
-    plt.text(float(chosen_threshold) + 0.01,
-             chosen["precision"], f"Precision={chosen['precision']:.2f}", va="center")
+    plt.annotate(
+        f"Precision={chosen['precision']:.2f}",
+        xy=(float(chosen_threshold), chosen["precision"]),
+        xytext=(8, -10),
+        textcoords="offset points",
+        va="top",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
+    )
 
     plt.xlabel("Alert threshold")
     plt.ylabel("Metric value")
     plt.title("Validation threshold trade-off: recall and precision")
-    plt.legend()
+    plt.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
     plt.xlim(0, 0.55)
+    plt.tight_layout()
     plt.show()
 
 
